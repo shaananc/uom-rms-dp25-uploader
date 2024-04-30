@@ -1,0 +1,39 @@
+# Change the values of the following keys to match your own configuration
+
+
+# This should be the location of a selenium driver for the browser you want to use 
+# (e.g. chromedriver for Chrome, geckodriver for Firefox)
+# See: https://chromedriver.chromium.org/getting-started
+binary_location: "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox"
+
+
+# This should be the path to the Excel file you want to read
+# Example:
+xlsx_path: ./DP25-Budget.xlsx
+
+# This should be the name of the sheet in the Excel file that contains the budget data
+sheet_name: '2. DP25 Budget Tool'
+
+
+# These values likely don't need to be changed
+year_columns:
+  - C
+  - J
+  - Q
+
+row_configs:
+  - start_row: 15
+    end_row: 21
+    category: PERSONNEL
+
+  - start_row: 36
+    end_row: 37
+    category: TEACHING_RELIEF
+
+  - start_row: 47
+    end_row: 47
+    category: TRAVEL
+
+  - start_row: 130
+    end_row: 132
+    category: OTHER
