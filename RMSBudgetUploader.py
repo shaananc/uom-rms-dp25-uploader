@@ -92,7 +92,7 @@ class RMSBudgetBuilder():
     #element.click()
     #.click()
     # wait until the page is loaded with the -delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525 element
-    WebDriverWait(self.driver, 10).until(expected_conditions.presence_of_element_located((By.ID, "-delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525"))
+    WebDriverWait(self.driver, 20).until(expected_conditions.presence_of_element_located((By.ID, "-delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525"))
     )
     element = self.driver.find_element(By.ID, "-delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525")
     self.driver.execute_script("arguments[0].click();", element)
@@ -106,7 +106,7 @@ class RMSBudgetBuilder():
   def create_element(self, category, year, name):
       element = self.driver.find_element(By.CSS_SELECTOR, f'#year{year} .-delta-budget-line[data-name="{category.value}"] .bi')
       self.driver.execute_script("arguments[0].click();", element)
-      wait = WebDriverWait(self.driver, 10)
+      wait = WebDriverWait(self.driver, 20)
       element = wait.until(expected_conditions.element_to_be_clickable((By.ID, "__bootbox_custom_input")))
       self.driver.find_element(By.ID, "__bootbox_custom_input").send_keys(name)
       self.driver.find_element(By.ID, "__bootbox_custom_input").send_keys(Keys.ENTER)

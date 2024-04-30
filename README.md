@@ -42,3 +42,5 @@ When prompted, enter your RMS username and password. The script will then upload
   - Travel
   - Teaching Relief
   - Other
+- You may have to click the "login" button manually if the script fails to do so
+- The script may fail due to RMS timeouts or other issues, in which case you will have to restart the script
