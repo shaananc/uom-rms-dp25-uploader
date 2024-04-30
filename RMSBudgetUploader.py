@@ -81,10 +81,12 @@ class RMSBudgetBuilder():
     self.driver.find_element(By.ID, "password").click()
     self.driver.find_element(By.ID, "password").send_keys(credentials["password"])
     self.driver.find_element(By.ID, "login").click()
+    # wait until the page is loaded
+    WebDriverWait(self.driver, 20).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, "Edit")))
 
   def goto_budget(self):
     # wait until the page is loaded
-    WebDriverWait(self.driver, 10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, "Edit")))
+    WebDriverWait(self.driver, 20).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, "Edit")))
     element = self.driver.find_element(By.LINK_TEXT, "Edit")
     self.driver.execute_script("arguments[0].click();", element)
     #element.click()
