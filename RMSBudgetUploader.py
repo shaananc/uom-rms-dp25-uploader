@@ -69,6 +69,8 @@ class RMSBudgetBuilder():
       # make the file only readable by the user
       os.chmod("credentials.json", 0o600)
 
+      return credentials
+
   def login(self):
     credentials = self.get_credentials()
     
