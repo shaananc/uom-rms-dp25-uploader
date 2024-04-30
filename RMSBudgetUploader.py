@@ -53,9 +53,10 @@ class RMSBudgetBuilder():
     if os.path.exists("credentials.json"):
       with open("credentials.json", "r") as file:
         credentials = json.load(file)
+        return credentials
     else:
       # prompt the user for username and password
-      username = input("Enter your RMS: ")
+      username = input("Enter your RMS Email: ")
       password = getpass.getpass("Enter your password: ")
 
       # save the username and password to a file
