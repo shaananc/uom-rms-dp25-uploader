@@ -37,3 +37,7 @@ row_configs:
   - start_row: 130
     end_row: 132
     category: OTHER
+
+  - start_row: 87
+    end_row: 87
+    category: EQUIPMENT
