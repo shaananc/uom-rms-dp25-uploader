@@ -9,6 +9,7 @@ from selenium.webdriver.firefox.options import Options
 from enum import Enum
 import getpass
 import os
+import yaml
 
 
 class BudgetCategory(Enum):
@@ -182,7 +183,18 @@ class RMSBudgetBuilder():
 
 if __name__ == "__main__":
   options = Options()
-  options.binary_location = ("/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox")
+
+
+  # get this from the yml file
+  config = None
+  with open("config.yml", "r") as file:
+    config = yaml.safe_load(file)
+
+    # Get the binary location from the config
+    binary_location = config["firefox_binary_location"]
+
+      # Set the binary location in options
+    options.binary_location = binary_location
 
   #options.headless = True
   options.add_argument("--width=1920")
