@@ -9,35 +9,42 @@ binary_location: "/Applications/Firefox Developer Edition.app/Contents/MacOS/fir
 
 # This should be the path to the Excel file you want to read
 # Example:
-xlsx_path: ./DP25-Budget.xlsx
+xlsx_path: "/Users/shaananc/Library/CloudStorage/OneDrive-Personal/useful-scripts/arc_budget/output/spreadsheet/DP27-Budget-Reconstructed.xlsx"
 
 # This should be the name of the sheet in the Excel file that contains the budget data
-sheet_name: '2. DP25 Budget Tool'
+sheet_name: '2. DP27 Budget Tool'
 
 
 # These values likely don't need to be changed
+proposal_id: "DP270101107"
 year_columns:
   - C
   - J
   - Q
+  - X
+  - AE
 
 row_configs:
   - start_row: 15
-    end_row: 21
+    end_row: 20
     category: PERSONNEL
 
-  - start_row: 36
-    end_row: 37
-    category: TEACHING_RELIEF
-
-  - start_row: 47
-    end_row: 47
+  - start_row: 48
+    end_row: 50
     category: TRAVEL
 
+  # - start_row: 38
+  #   end_row: 47
+  #   category: FIELD_RESEARCH
+
+  # - start_row: 49
+  #   end_row: 58
+  #   category: MAINTENANCE
+
   - start_row: 130
-    end_row: 132
+    end_row: 134
     category: OTHER
 
-  - start_row: 87
-    end_row: 87
-    category: EQUIPMENT
+in_kind: True
+teaching_relief: False
+clear_first: True
