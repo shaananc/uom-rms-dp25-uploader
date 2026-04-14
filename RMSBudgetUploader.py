@@ -1,15 +1,21 @@
-import time
+from __future__ import annotations
+
 import json
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.firefox.options import Options
+import logging
+import subprocess
+import time
 from enum import Enum
-import getpass
-import os
-import yaml
+from pathlib import Path
+
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+logger = logging.getLogger(__name__)
 
 
 class BudgetCategory(Enum):
@@ -22,182 +28,467 @@ class BudgetCategory(Enum):
     OTHER = "Other"
     TOTAL = "Total"
 
-class RMSBudgetBuilder():
-  def __init__(self, options):
-    self.driver = None
-    self.vars = {}
-    self.options = options
 
+class RMSBudgetBuilder:
+    def __init__(
+        self,
+        *,
+        root: Path | None = None,
+        proposal_id: str | None = None,
+        driver: webdriver.Chrome | None = None,
+        chrome_binary: str = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        chromedriver_path: str | None = None,
+    ) -> None:
+        self.root = root or Path(__file__).resolve().parent
+        self.proposal_id = proposal_id
+        self.driver = driver
+        self.chrome_binary = chrome_binary
+        self.chromedriver_path = chromedriver_path
 
-  def __init__(self):
-    options = Options()
-    options.binary_location = ("/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox")
-    #options.headless = True
-    options.add_argument("--width=1920")
-    options.add_argument("--height=1080")
-    self.driver = None
-    self.vars = {}
-    self.options = options
-    
+    def __del__(self) -> None:
+        try:
+            if self.driver is not None:
+                self.driver.quit()
+        except Exception:
+            pass
 
-  def setup(self):
-    self.driver = webdriver.Firefox(options=self.options)
-    self.vars = {}
-  
-  def __del__(self):
-    if self.driver is not None:
-      self.driver.quit()
-  
-  def get_credentials(self):
-    credentials = None
-    # check if the credentials file exists
-    if os.path.exists("credentials.json"):
-      with open("credentials.json", "r") as file:
-        credentials = json.load(file)
-        return credentials
-    else:
-      # prompt the user for username and password
-      username = input("Enter your RMS Email: ")
-      password = getpass.getpass("Enter your password: ")
+    @staticmethod
+    def visible_elements(driver, selector: str):
+        elements = driver.find_elements(By.CSS_SELECTOR, selector)
+        return [element for element in elements if element.is_displayed()]
 
-      # save the username and password to a file
-      credentials = {
-        "username": username,
-        "password": password
-      }
-      with open("credentials.json", "w") as file:
-        json.dump(credentials, file)
+    @staticmethod
+    def canonical_name(name: str) -> str:
+        return str(name).splitlines()[0].strip()
 
-      # make the file only readable by the user
-      os.chmod("credentials.json", 0o600)
+    def chrome_options(self) -> ChromeOptions:
+        options = ChromeOptions()
+        options.binary_location = self.chrome_binary
+        options.add_argument("--window-size=1440,1000")
+        options.add_argument("--no-sandbox")
+        return options
 
-      return credentials
+    def resolve_matching_chromedriver(self) -> str:
+        chrome_binary = Path(self.chrome_binary)
+        version_output = subprocess.check_output(
+            [str(chrome_binary), "--version"], text=True
+        ).strip()
+        chrome_version = version_output.removeprefix("Google Chrome ").strip()
+        cached_driver = (
+            Path.home()
+            / ".cache/selenium/chromedriver/mac-arm64"
+            / chrome_version
+            / "chromedriver"
+        )
+        if cached_driver.exists():
+            return str(cached_driver)
+        raise FileNotFoundError(
+            f"No matching cached ChromeDriver for Chrome {chrome_version}"
+        )
 
-  def login(self):
-    credentials = self.get_credentials()
-    
-    self.driver.get("https://rms.arc.gov.au/RMS/ActionCentre/Account/Login?ReturnUrl=%2FRMS%2FActionCentre")
-    self.driver.set_window_size(550, 691)
-    self.driver.find_element(By.ID, "emailAddress").send_keys(credentials["username"])
-    self.driver.find_element(By.ID, "password").click()
-    self.driver.find_element(By.ID, "password").send_keys(credentials["password"])
-    self.driver.find_element(By.ID, "login").click()
-    # wait until the page is loaded
-    WebDriverWait(self.driver, 20).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, "Edit")))
+    def setup(self) -> None:
+        options = self.chrome_options()
+        driver_path = self.chromedriver_path or self.resolve_matching_chromedriver()
+        service = ChromeService(executable_path=driver_path)
+        self.driver = webdriver.Chrome(service=service, options=options)
 
-  def goto_budget(self):
-    # wait until the page is loaded
-    WebDriverWait(self.driver, 20).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, "Edit")))
-    element = self.driver.find_element(By.LINK_TEXT, "Edit")
-    self.driver.execute_script("arguments[0].click();", element)
-    #element.click()
-    #.click()
-    # wait until the page is loaded with the -delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525 element
-    WebDriverWait(self.driver, 20).until(expected_conditions.presence_of_element_located((By.ID, "-delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525"))
-    )
-    element = self.driver.find_element(By.ID, "-delta-form-part-button-60c7008b-bde5-443a-976c-290c3eaa6de8__b9af8d46-0fab-4ece-bed1-d76af1982525")
-    self.driver.execute_script("arguments[0].click();", element)
+    def read_credentials(self, path: Path | None = None) -> dict[str, str]:
+        credentials_path = path or (self.root / "rmscreds.txt")
+        lines = credentials_path.read_text().splitlines()
+        return {"username": lines[0].strip(), "password": lines[1].strip()}
 
-  def goto_budget_year(self, year):
-    #self.driver.execute_script("window.scrollTo(0,0)")
-    element = self.driver.find_element(By.ID, f"-delta-budget-year-{year}")
-    #click it with js
-    self.driver.execute_script("arguments[0].click();", element)
+    def login(self, credentials_path: Path | None = None) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
 
-  def create_element(self, category, year, name):
-      element = self.driver.find_element(By.CSS_SELECTOR, f'#year{year} .-delta-budget-line[data-name="{category.value}"] .bi')
-      self.driver.execute_script("arguments[0].click();", element)
-      wait = WebDriverWait(self.driver, 20)
-      element = wait.until(expected_conditions.element_to_be_clickable((By.ID, "__bootbox_custom_input")))
-      self.driver.find_element(By.ID, "__bootbox_custom_input").send_keys(name)
-      self.driver.find_element(By.ID, "__bootbox_custom_input").send_keys(Keys.ENTER)
-      self.driver.find_element(By.CSS_SELECTOR, ".btn-primary").click()
-      # wait one second
-      time.sleep(1)
+        credentials = self.read_credentials(credentials_path)
+        self.driver.get("https://rms.arc.gov.au/RMS/ActionCentre")
+        self.driver.set_window_size(550, 691)
 
+        if self.driver.find_elements(By.LINK_TEXT, "Edit"):
+            return
 
-  def input_category(self, year, category: BudgetCategory, name, arc_cash, admin_cash, admin_inkind):
-    name = name.strip()
+        if self.driver.find_elements(By.ID, "emailAddress"):
+            self.driver.find_element(By.ID, "emailAddress").send_keys(
+                credentials["username"]
+            )
+            password = self.driver.find_element(By.ID, "password")
+            password.click()
+            password.send_keys(credentials["password"])
+            try:
+                self.driver.find_element(By.ID, "login").click()
+            except Exception:
+                self.driver.execute_script(
+                    "arguments[0].click();", self.driver.find_element(By.ID, "login")
+                )
 
-    last_element = None
-    while last_element == None:
+        deadline = time.time() + 10 * 60
+        last_notice = 0.0
+        while time.time() < deadline:
+            if self.driver.find_elements(By.LINK_TEXT, "Edit"):
+                return
+            if time.time() - last_notice > 5:
+                logger.info(
+                    "Waiting for RMS login / 2FA completion in the visible browser"
+                )
+                last_notice = time.time()
+            time.sleep(1)
 
-      # Fetch all elements with the specified data-parent attribute
-      selector = f'#year{year} .-delta-budget-line[data-parent="{category.value}"]'
-      elements = self.driver.find_elements(By.CSS_SELECTOR,selector)
-      elements = [element for element in elements if element.value_of_css_property('display') != 'none']
-      # Select the one whose text matches name and set it to last_element
-      last_element = None
-      for element in elements:
-        if element.text == name:
-          last_element = element
-          break
+        raise TimeoutException("Timed out waiting for RMS login / 2FA completion")
 
-      if last_element is None:
-        self.create_element(category, year, name)
+    def goto_budget(self, proposal_id: str | None = None) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
 
-    #last_element = elements[-1]
-    # Now find the child element with the specified headers attribute
-    target_elements = last_element.find_elements(By.CSS_SELECTOR,'td > input')
-    inputs = [arc_cash, admin_cash, admin_inkind]
-    for element in target_elements[-3:]:
-      # special case for HDR (Higher Degree by Research stipend) on RMS
-      if name == 'HDR (Higher Degree by Research stipend)' and len(inputs) == 3:
-        inputs.pop(0)
-        continue
-      self.driver.execute_script("arguments[0].click();", element)
-      self.driver.execute_script("arguments[0].value = '';", element)
-      element.send_keys(inputs.pop(0))
+        target_proposal = proposal_id or self.proposal_id
+        if not target_proposal:
+            raise ValueError("proposal_id must be provided")
 
-    # final click just to save the data
-    self.driver.execute_script("arguments[0].click();", target_elements[-2])
+        self.driver.get(f"https://rms.arc.gov.au/RMS/Proposal/Form/Edit/{target_proposal}")
+        wait = WebDriverWait(self.driver, 30)
+        wait.until(
+            EC.presence_of_element_located(
+                (By.XPATH, '//button[contains(normalize-space(.), "Project Cost")]')
+            )
+        )
+        project_cost_button = self.driver.find_element(
+            By.XPATH, '//button[contains(normalize-space(.), "Project Cost")]'
+        )
+        self.driver.execute_script("arguments[0].click();", project_cost_button)
+        wait.until(EC.presence_of_element_located((By.ID, "-delta-budget-year-1")))
+        time.sleep(1)
 
-  def save_budget(self):
-    element = self.driver.find_element(By.ID, "-delta-form-save")
-    self.driver.execute_script("arguments[0].click();", element)
-  
-  def apply_teaching_relief(self):
-    # click all .-teaching-relief-approve-button
-    # wait for document to finish loading
-    WebDriverWait(self.driver, 10).until(expected_conditions.presence_of_element_located((By.CSS_SELECTOR, ".-teaching-relief-approve-button")))
-    time.sleep(1)
+    def goto_budget_year(self, year: int) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
 
-    while True:
-      try:
-        element = self.driver.find_element(By.CSS_SELECTOR, ".-teaching-relief-approve-button:not([disabled])")
-        self.driver.execute_script("arguments[0].click();", element)
-      except:
-        break
+        year_button = self.driver.find_element(By.ID, f"-delta-budget-year-{year}")
+        self.driver.execute_script("arguments[0].click();", year_button)
+        WebDriverWait(self.driver, 10).until(
+            lambda driver: "active"
+            in driver.find_element(By.ID, f"year{year}").get_attribute("class")
+        )
+        time.sleep(0.4)
 
-  def test_build_rms_budget(self):
-    self.setup()
-    self.login()
-    self.goto_budget()
-    self.goto_budget_year(1)
-    #self.input_category(1, RMSBudgetBuilder.BudgetCategory.PERSONNEL, "Person 1", "10000", "2000", "3000")
-    #self.input_category(1, RMSBudgetBuilder.BudgetCategory.PERSONNEL , "Person 2", "20000", "3000", "4000")
-    self.save_budget()
-    self.__del__()
+    def maybe_confirm_modal(self) -> bool:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
 
+        selectors = [
+            ".bootbox.modal.show .btn-primary",
+            ".bootbox.modal.show .btn-danger",
+            ".modal.show .btn-primary",
+            ".modal.show .btn-danger",
+        ]
+        for selector in selectors:
+            elements = self.visible_elements(self.driver, selector)
+            if elements:
+                self.driver.execute_script("arguments[0].click();", elements[0])
+                time.sleep(0.7)
+                return True
+        return False
 
+    def create_element(self, category: BudgetCategory, year: int, name: str) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
 
-if __name__ == "__main__":
-  options = Options()
+        add_button = self.driver.find_element(
+            By.CSS_SELECTOR,
+            f'#year{year} .-delta-budget-line[data-name="{category.value}"] .-delta-add-item',
+        )
+        self.driver.execute_script("arguments[0].click();", add_button)
+        wait = WebDriverWait(self.driver, 20)
+        input_box = wait.until(EC.element_to_be_clickable((By.ID, "__bootbox_custom_input")))
+        input_box.clear()
+        input_box.send_keys(name)
+        input_box.send_keys("\n")
+        accept = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".bootbox.modal.show .btn-primary"))
+        )
+        self.driver.execute_script("arguments[0].click();", accept)
+        time.sleep(1.0)
 
+    def row_selector(self, year: int, category: str, name: str) -> str:
+        return (
+            f'#year{year} .-delta-budget-line[data-parent="{category}"]'
+            f'[data-name="{name}"]'
+        )
 
-  # get this from the yml file
-  config = None
-  with open("config.yml", "r") as file:
-    config = yaml.safe_load(file)
+    def clear_category(self, year: int, category: str) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
 
-    # Get the binary location from the config
-    binary_location = config["firefox_binary_location"]
+        while True:
+            selector = (
+                f'#year{year} .-delta-budget-line[data-parent="{category}"] .-delta-delete-item'
+            )
+            buttons = self.visible_elements(self.driver, selector)
+            if not buttons:
+                return
+            self.driver.execute_script("arguments[0].click();", buttons[-1])
+            time.sleep(0.3)
+            self.maybe_confirm_modal()
+            time.sleep(1.0)
 
-      # Set the binary location in options
-    options.binary_location = binary_location
+    def clear_year(self, year: int) -> None:
+        self.goto_budget_year(year)
+        for category in ["Personnel", "Travel", "Other"]:
+            self.clear_category(year, category)
+        logger.info("Cleared year %s", year)
 
-  #options.headless = True
-  options.add_argument("--width=1920")
-  options.add_argument("--height=1080")
-  test = RMSBudgetBuilder(options)
-  test.test_build_rms_budget()
+    def desired_names_for_payload(self, payload: dict, category: str) -> set[str]:
+        return {
+            self.canonical_name(entry["name"])
+            for year_data in payload["years"]
+            for entry in year_data["entries"]
+            if entry["category"] == category
+        }
+
+    def remove_extra_rows(self, payload: dict, year: int) -> bool:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
+
+        self.goto_budget_year(year)
+        removed = False
+        for category in ["Personnel", "Travel", "Other"]:
+            desired = self.desired_names_for_payload(payload, category)
+            selector = (
+                f'#year{year} .-delta-budget-line[data-parent="{category}"]:not([data-template="true"])'
+            )
+            while True:
+                rows = self.visible_elements(self.driver, selector)
+                extra_row = None
+                extra_name = ""
+                for row in reversed(rows):
+                    name = (row.get_attribute("data-name") or "").strip()
+                    if name and name not in desired:
+                        extra_row = row
+                        extra_name = name
+                        break
+                if extra_row is None:
+                    break
+                delete_button = extra_row.find_element(By.CSS_SELECTOR, ".-delta-delete-item")
+                self.driver.execute_script("arguments[0].click();", delete_button)
+                time.sleep(0.3)
+                self.maybe_confirm_modal()
+                time.sleep(1.0)
+                removed = True
+                logger.info(
+                    "Removed extra row from year %s: %s | %s",
+                    year,
+                    category,
+                    extra_name,
+                )
+        return removed
+
+    def ensure_entry_row(self, year: int, category: str, name: str):
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
+
+        selector = self.row_selector(year, category, name)
+        rows = self.driver.find_elements(By.CSS_SELECTOR, selector)
+        if rows:
+            return rows[0]
+
+        labeled_rows = self.visible_elements(
+            self.driver,
+            f'#year{year} .-delta-budget-line[data-parent="{category}"]',
+        )
+        for row in labeled_rows:
+            label_elements = row.find_elements(By.CSS_SELECTOR, ".-delta-category-name")
+            label = label_elements[0].text.strip() if label_elements else ""
+            if label == name:
+                return row
+
+        category_rows_selector = (
+            f'#year{year} .-delta-budget-line[data-parent="{category}"]:not([data-template="true"])'
+        )
+        existing_count = len(self.driver.find_elements(By.CSS_SELECTOR, category_rows_selector))
+        self.create_element(BudgetCategory[category.upper().replace(" ", "_")], year, name)
+        WebDriverWait(self.driver, 20).until(
+            lambda driver: len(driver.find_elements(By.CSS_SELECTOR, category_rows_selector))
+            > existing_count
+        )
+        time.sleep(0.7)
+        return self.driver.find_elements(By.CSS_SELECTOR, category_rows_selector)[-1]
+
+    def set_input_value(self, element, value: int) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
+
+        self.driver.execute_script(
+            """
+            arguments[0].value = arguments[1];
+            arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
+            arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
+            """,
+            element,
+            str(value),
+        )
+
+    def normalized_inputs(self, row) -> list[str]:
+        values = [
+            item.get_attribute("value")
+            for item in row.find_elements(By.CSS_SELECTOR, "input.-delta-input")
+        ]
+        normalized: list[str] = []
+        for value in values:
+            value = (value or "").replace(",", "").strip()
+            normalized.append(value or "0")
+        return normalized
+
+    def desired_inputs(self, arc_cash: int, admin_cash: int, admin_inkind: int, input_count: int) -> list[str]:
+        values = [str(arc_cash), str(admin_cash)]
+        if input_count >= 3 and admin_inkind != -1:
+            values.append(str(admin_inkind))
+        return values
+
+    def input_category(
+        self,
+        year: int,
+        category: BudgetCategory,
+        name: str,
+        arc_cash: int,
+        admin_cash: int,
+        admin_inkind: int,
+    ) -> bool:
+        row = self.ensure_entry_row(year, category.value, name.strip())
+        inputs = row.find_elements(By.CSS_SELECTOR, "input.-delta-input")
+        desired = self.desired_inputs(arc_cash, admin_cash, admin_inkind, len(inputs))
+        current = self.normalized_inputs(row)
+
+        changed = False
+        for input_element, current_value, desired_value in zip(inputs, current, desired):
+            if current_value == desired_value:
+                continue
+            self.set_input_value(input_element, int(desired_value))
+            changed = True
+        return changed
+
+    def save_budget(self) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
+
+        save_button = self.driver.find_element(By.ID, "-delta-form-save")
+        self.driver.execute_script("arguments[0].click();", save_button)
+        WebDriverWait(self.driver, 30).until(
+            lambda current: current.find_element(By.ID, "-delta-form-save").is_enabled()
+        )
+        time.sleep(0.5)
+
+    def scrape_visible_rows(self, year: int) -> list[dict[str, object]]:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
+
+        self.goto_budget_year(year)
+        rows = self.visible_elements(
+            self.driver,
+            f"#year{year} .-delta-budget-line:not([data-template='true'])",
+        )
+        output: list[dict[str, object]] = []
+        for row in rows:
+            name = row.get_attribute("data-name") or ""
+            parent = row.get_attribute("data-parent") or ""
+            inputs = row.find_elements(By.CSS_SELECTOR, "input.-delta-input")
+            input_values = [item.get_attribute("value") for item in inputs]
+            if name:
+                output.append({"parent": parent, "name": name, "inputs": input_values})
+        return output
+
+    def print_totals(self, year: int) -> None:
+        if self.driver is None:
+            raise RuntimeError("Driver is not initialized")
+
+        self.goto_budget_year(year)
+        selector = (
+            f'#year{year} .-delta-budget-line[data-parent=""][data-name="Total"] .-delta-value'
+        )
+        values = [
+            element.get_attribute("data-amount")
+            for element in self.visible_elements(self.driver, selector)
+        ]
+        values = [value for value in values if value]
+        logger.info("Year %s totals after save: %s", year, values)
+
+    def sync_entry(self, year: int, entry: dict) -> bool:
+        return self.input_category(
+            year,
+            BudgetCategory[entry["category"].upper().replace(" ", "_")],
+            self.canonical_name(entry["name"]),
+            int(entry["arc"]),
+            int(entry["admin"]),
+            int(entry["inkind"]),
+        )
+
+    def sync_year(self, year_data: dict) -> bool:
+        year = int(year_data["year"])
+        self.goto_budget_year(year)
+        changed = False
+        for entry in year_data["entries"]:
+            entry_changed = self.sync_entry(year, entry)
+            if entry_changed:
+                changed = True
+                logger.info(
+                    "Updated year %s: %s | %s | ARC %s | Admin %s | In-kind %s",
+                    year,
+                    entry["category"],
+                    entry["name"],
+                    entry["arc"],
+                    entry["admin"],
+                    entry["inkind"],
+                )
+            else:
+                logger.info(
+                    "Unchanged year %s: %s | %s",
+                    year,
+                    entry["category"],
+                    entry["name"],
+                )
+        return changed
+
+    def sync_payload(
+        self,
+        payload: dict,
+        *,
+        full_reset: bool = False,
+        prune: bool = True,
+        years: list[int] | None = None,
+    ) -> None:
+        target_years = years or [int(year_data["year"]) for year_data in payload["years"]]
+
+        if full_reset:
+            for year in range(1, 6):
+                self.clear_year(year)
+            self.save_budget()
+            self.goto_budget(payload["proposal_id"])
+
+        any_changed = False
+        for year_data in payload["years"]:
+            any_changed = self.sync_year(year_data) or any_changed
+
+        if any_changed or full_reset:
+            self.save_budget()
+            self.goto_budget(payload["proposal_id"])
+
+        if prune:
+            for cleanup_round in range(1, 8):
+                removed_any = False
+                for year in target_years:
+                    removed_any = self.remove_extra_rows(payload, year) or removed_any
+                if not removed_any:
+                    break
+                logger.info("Completed cleanup round %s", cleanup_round)
+                self.save_budget()
+                self.goto_budget(payload["proposal_id"])
+            self.save_budget()
+            self.goto_budget(payload["proposal_id"])
+
+    def write_verification(self, path: Path, years: list[int]) -> None:
+        if not self.proposal_id:
+            raise ValueError("proposal_id must be set to write verification")
+
+        verify = {"proposal_id": self.proposal_id, "years": []}
+        for year in years:
+            verify["years"].append({"year": year, "rows": self.scrape_visible_rows(year)})
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(verify, indent=2))

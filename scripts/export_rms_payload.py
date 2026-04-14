@@ -5,6 +5,7 @@ import json
 import logging
 from pathlib import Path
 
+from rich.logging import RichHandler
 import yaml
 from openpyxl import load_workbook
 from openpyxl.utils import column_index_from_string, get_column_letter
@@ -51,7 +52,7 @@ def offset_cells(row: int, year_columns: list[str], offset: int) -> list[str]:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=[RichHandler()])
     args = parse_args()
 
     config = yaml.safe_load(args.config.read_text())
@@ -63,6 +64,40 @@ def main() -> None:
 
     for row_config in config["row_configs"]:
         category = row_config["category"].title()
+        if category in {"Travel", "Other"}:
+            totals = [
+                {"arc": 0, "admin": 0, "inkind": 0} for _ in range(len(year_columns))
+            ]
+            for row in range(row_config["start_row"], row_config["end_row"] + 1):
+                name = first_line(sheet[f"A{row}"].value)
+                if not name:
+                    continue
+                arc_values = [money(sheet[cell].value) for cell in offset_cells(row, year_columns, 0)]
+                admin_values = [money(sheet[cell].value) for cell in offset_cells(row, year_columns, 1)]
+                inkind_values = [money(sheet[cell].value) for cell in offset_cells(row, year_columns, 2)]
+                for year_index in range(len(year_columns)):
+                    totals[year_index]["arc"] += arc_values[year_index]
+                    totals[year_index]["admin"] += admin_values[year_index]
+                    totals[year_index]["inkind"] += inkind_values[year_index]
+
+            consolidated_name = "Total Travel Costs" if category == "Travel" else "Total Other Costs"
+            for year_index, year_data in enumerate(years):
+                arc = totals[year_index]["arc"]
+                admin = totals[year_index]["admin"]
+                inkind = totals[year_index]["inkind"]
+                if not any((arc, admin, inkind)):
+                    continue
+                year_data["entries"].append(
+                    {
+                        "category": category,
+                        "name": consolidated_name,
+                        "arc": arc,
+                        "admin": admin,
+                        "inkind": inkind,
+                    }
+                )
+            continue
+
         for row in range(row_config["start_row"], row_config["end_row"] + 1):
             name = first_line(sheet[f"A{row}"].value)
             if not name:

@@ -26,13 +26,23 @@ See the `config.yml` file for the configuration options. You can specify the pat
 
 ## Usage
 
-Run the script with:
+Generate the payload and run the canonical Selenium uploader with:
 
 ```bash
-python budget-arc.py
+uv run python scripts/export_rms_payload.py
+uv run python scripts/upload_rms_budget_selenium.py
 ```
 
-When prompted, enter your RMS username and password. The script will then upload the data to the RMS.
+The default uploader behavior is a true sync:
+- add missing managed rows
+- update changed values
+- remove stale managed rows
+
+Optional modes:
+- `--full-reset` to delete and rebuild everything
+- `--no-prune` to keep stale managed rows
+
+`budget-arc.py` is now just a compatibility wrapper around `scripts/upload_rms_budget_selenium.py`.
 
 ## Limitations
 
